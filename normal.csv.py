@@ -3,17 +3,16 @@
 import sys,os
 inputfile = sys.argv [1]
 names_ages = {}
+int_ag =[]
 #revers_dict = {}
 with open(inputfile, 'r') as csvfile:
     for line in csvfile.readlines():
         if not line:
             continue
         id,name,age = [ x.strip()for x in line.split(",")]
-        print age
         names_ages[name] = age
         if "name" in names_ages.keys() :
             del names_ages["name"]
-revers_dict = [(value, key) for key,value in names_ages.items()]
-
+revers_dict = [(int(value), key) for key,value in names_ages.items()]
 print ( "the youngest person is ", min(revers_dict))
 print ("the oldest age is" , max(revers_dict))
