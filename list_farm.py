@@ -11,15 +11,6 @@ nodes =[]
 nodes_os = []
 last_updated = []
 
-def check_farm_existing(myfarm):
-    try:
-        capacity = j.clients.threefold_directory.get(interactive=False)
-        capacity.api.GetFarmer(myfarm)
-        print('the farm {} is exist ....'.format(myfarm))
-    except:
-        print('the farm {} does not exist on our grid, check may no node are added to it '.format(self.myfarm))
-
-
 @click.command()
 @click.option('--myfarm', '-f', help='put your farm name ', required=True)
 
