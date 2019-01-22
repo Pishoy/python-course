@@ -1,11 +1,6 @@
 from jumpscale import j
 import pandas as pd
 
-# declaring list of store data
-nodes = []
-nodes_os = []
-last_updated = []
-
 # example
 # s = farmers()
 # s.list()
@@ -44,7 +39,7 @@ class farmers:
             nodes_os.append(os_version)
             updated = node['updated']
             last_updated.append(updated)
-        import ipdb;ipdb.set_trace()
+        #import ipdb;ipdb.set_trace()
         import pandas as pd
         table = pd.DataFrame({'node_id': nodes,
                               'os_version':nodes_os,
