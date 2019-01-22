@@ -5,6 +5,7 @@ import pandas as pd
 # s = farmers()
 # s.list()
 # s.check_farm_existing('bishoy_farm')
+# s.check_farm_nodes('bishoy_farm')
 
 class farmers:
     def __init__(self):
