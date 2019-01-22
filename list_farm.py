@@ -43,11 +43,9 @@ def main (myfarm):
                               'last_updated' : last_updated})
         print ('Total number of nodes in this farm is {}'.format(len(nodes)))
         print (table[1:])
-    except HTTPError, err:
-        if err.code == 404:
-            err.meg = ' farmer name %s does not exist on our grid %s' % (myfarm,err.meg)
+    except:
         raise
-
 
 if __name__ == "__main__":
     main()
+
