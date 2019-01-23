@@ -3,7 +3,11 @@
 from jumpscale import j
 import pandas as pd
 import click
-from urllib import error
+#from urllib import error
+
+# usage as below
+# python3 list_farm.py -f bishoy_farm
+
 
 #import ipdb;ipdb.set_trace()
 # declare my variables
