@@ -20,7 +20,8 @@ requests = 0
 
 # set header to get english lang
 headers = {"Accept-Language": "en-US, en;q=0.5"}
-import ipdb;ipdb.set_trace()
+# to trace functions
+#import ipdb;ipdb.set_trace()
 # For every year in the interval 2000-2017 , let now one year 2018
 for year_url in [str(i) for i in range(2018,2019)]:
 
