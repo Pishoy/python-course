@@ -1,4 +1,8 @@
+# this script to scrap or get information of imdb websites about films 
+# you can choose the year of films that is the films created on it, get (rate,vote)
+
 # reference https://www.dataquest.io/blog/web-scraping-beautifulsoup/
+
 from time import sleep
 from random import randint
 from time import time
