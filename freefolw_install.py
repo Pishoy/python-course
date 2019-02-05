@@ -1,5 +1,6 @@
 from Jumpscale import j
-logger = j.logger.get('installingFreeFolwPages')
+log = j.logger.get('InstallingFreeFolwPages')
+#j.logger.loggers_level_set(level='DEBUG')
 import click
 
 @click.command()
@@ -7,9 +8,24 @@ import click
 @click.option('--jwt', '-j', help="optional node jwt")
 @click.option('--ztid', '-ztid', required=True, help="zerotier network to join it ")
 @click.option('--zttoken', '-zttoken', required=True, help="zerotier token to join it ")
+@click.option('--storagepool', '-sp', required=True, help="storage pool that need to be create database/app backup")
 
 
-def main(node, jwt,ztid,zttoken):
+
+def create_backup(humhub_node_ip):
+    # create gzipped file with data
+    pass
+
+
+def restore(old_humhub_node_ip, new_humhub_node_ip):
+    # connect to old
+    # download data
+    # restore & run commands
+    pass
+
+
+def create_humhub_container(node, jwt,ztid,zttoken,sp):
+    mydir = 'freeflowBackup'
     data = {'host': node}
     if jwt:
         data['password_'] = jwt
@@ -18,24 +34,42 @@ def main(node, jwt,ztid,zttoken):
     url = 'http://{}:6600'.format(nodeip)
     check = node_client.capacity.node_parameters()
     if check[0] not in 'support':
-        logger = j.logger.error('Please note node does not in support mode, check if it is developement ... so you can comelete')
+        log.error('Please note node does not in support mode, check if it is developement ... so you can comelete')
     zrobot_cont = node_client.containers.get('zrobot')
     zrobottoken = zrobot_cont.client.bash('zrobot godtoken get').get()
     string = zrobottoken.stdout.split(":")[1]
     token = string.strip()
-    j.clients.zrobot.new(node_client.name,data={'url':url,'god_token_':token})
+    j.clients.zrobot.new(node_client.name, data={'url': url, 'god_token_': token})
     node_robot = j.clients.zrobot.robots.get(node_client.name)
-    args = {'token': zttoken,}
-    zt = node_robot.services.create('github.com/threefoldtech/0-templates/zerotier_client/0.0.1', 'ztclientB', args)
+    args = {'token': zttoken, }
+    node_robot.services.find_or_create('github.com/threefoldtech/0-templates/zerotier_client/0.0.1', 'ztclientB',
+                                            args)
+    node_client.bash('mkdir /mnt/storagepools/$sp/$mydir').get()
     container_data = {
-    'flist': 'https://hub.grid.tf/nashaatp/humhub.flist',
-    'nics': [{'type': 'default'},{'type':'zerotier','name':'zerotier', 'id':zttoken,'ztClient':'ztclientB' }],}
+        'flist': 'https://hub.grid.tf/nashaatp/humhub.flist',
+        'mounts': [{'source': '/mnt/storagepools/$sp/$mydir', 'target': '/humhubBackup'}],
+        'nics': [{'type': 'default'},
+                 {'type': 'zerotier', 'name': 'zerotier', 'id': ztid, 'ztClient': 'ztclientB'}], }
     humhub_name = 'freeflowpages_test'
-    container = node_robot.services.create('github.com/threefoldtech/0-templates/container/0.0.1', humhub_name, data=container_data)
+    container = node_robot.services.find_or_create('github.com/threefoldtech/0-templates/container/0.0.1', humhub_name,
+                                                   data=container_data)
+    log.info('creating humhub container .........')
     container.schedule_action('install').wait(die=True)
     freeflowpages_test = node_client.containers.get(humhub_name)
     freeflowpages_test.client.bash('mkdir /root/.ssh').get()
-    freeflowpages_test.client.bash('echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC8o0jEGYqe2k7J0TNL6Gg8h86ic3ReiC6THlBnOKPDiKProj/4uMTmi1Qf5OcLIdeHgcP+zy+ZL4kpP7N6VTALRPiTn6Lty6ZP+5mQocaJYosoGLzB6+lx1NW/zXtscv4V3goULiDEx9SBzSuD8wS0k00iHcRjmuFUIfERyYR8mjmWC/sRf1Y7qk9kQjFOLW5Sw0+RLrxr4l2ur/n8bDVgGVpzWypKIsqRU6Rf1HdXWmdAMCucPAkxR5WNies5QFOkyllxI6Fq+G9M0Uf+EubpfpC1oOMWjNFy781M4KZF+FXODcBlwevfvk0HH/5mTHOymIfwVV8vjRzycxjuQib3 pishoy@Bishoy-laptop" >> /root/.ssh/authorized_keys').get()
+
+    freeflowpages_test.client.bash(
+        'echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC8o0jEGYqe2k7J0TNL6Gg8h86ic3ReiC6THlBnOKPDiKProj/4uMTmi1Qf5OcLIdeHgcP+zy+ZL4kpP7N6VTALRPiTn6Lty6ZP+5mQocaJYosoGLzB6+lx1NW/zXtscv4V3goULiDEx9SBzSuD8wS0k00iHcRjmuFUIfERyYR8mjmWC/sRf1Y7qk9kQjFOLW5Sw0+RLrxr4l2ur/n8bDVgGVpzWypKIsqRU6Rf1HdXWmdAMCucPAkxR5WNies5QFOkyllxI6Fq+G9M0Uf+EubpfpC1oOMWjNFy781M4KZF+FXODcBlwevfvk0HH/5mTHOymIfwVV8vjRzycxjuQib3 pishoy@Bishoy-laptop" >> /root/.ssh/authorized_keys').get()
+    contIP = freeflowpages_test.client.zerotier.list()[0]['assignedAddresses'][1]
+    container_IP = contIP.split("/")[0]
+    return container_IP
+
+def main():
+
+    new_humhub_node_ip = create_humhub_container()
+    # old_humhub_node_ip = '0.0.0.0'
+    #create_backup(old_humhub_node_ip)
+    #restore(old_humhub_node_ip, new_humhub_node_ip)
 
 if __name__ == "__main__":
     main()
