@@ -2,7 +2,8 @@ from Jumpscale import j
 
 log = j.logger.get('InstallingFreeFolwPages')
 # j.logger.loggers_level_set(level='DEBUG')
-
+# need to set mysql pass in flist # mysql -e 'SET PASSWORD FOR 'humhub'@'localhost' = PASSWORD("test");'
+# add auto ssh keys in container then uplaod it to ssh productions server # ssh-keygen -b 2048 -t rsa -f ~/.ssh/rsa -q -N ""
 # usage example
 # python3 freefolw_install.py -n 10.102.114.69 -j "eyJhbGciOiJFUzM4vL4vi-Sn" --ztid "83048a0632bd58b2" --zttoken "fcUBv" --storagepool "2915c3ee-aa68-48ff-9737-57fe363951f0"
 
@@ -32,19 +33,28 @@ def create_backup(production_ip, db_user, db_password):
     sshclient.execute(backup_script)
 
 
-def restore(container_client, db_user, db_password):
-    log.info('restoring application and database from the backup of production')
+def restore(container_client,production_ip,db_user, db_password, test_db_humhub_user_passwd):
+    log.info('restoring application and database from the ')
     restore_script = """
     cd /root
     scp root@{0}:/root/humhub_backup.tgz  .
     tar -zvxf humhub_backup.tgz
     mysql -u {1} -p{2} -D humhub  < humhub_backup/humhub.sql
-    echo "$?"
     cp -r humhub_backup/* /var/www/html/humhub
-    echo "DONE"
-    """.format(production_ip, db_user, db_password)
+    
+    # change mysql password in humhub config to test environment password
+    
+    sed -i "s/.*'password' =>.*/      'password' => '{3}',/" /var/www/html/humhub/protected/config/dynamic.php
+    
+    /usr/bin/php /var/www/html/humhub/protected/yii  queue/run
+    /usr/bin/php /var/www/html/humhub/protected/yii  cron/run
+    /usr/bin/php /var/www/html/humhub/protected/yii  search/rebuild 
 
-    container_client.bash(restore_script)
+    echo "DONE"
+    """.format(production_ip, db_user, db_password, test_db_humhub_user_passwd)
+
+
+    container_client.bash(restore_script).get()
 
 
 def create_test_container(node, jwt, ztid, zttoken, storagepool):
@@ -104,7 +114,8 @@ def create_test_container(node, jwt, ztid, zttoken, storagepool):
 @click.option('--production_db_passwd', '-ps', required=True, help="production db pass")
 @click.option('--test_db_user', '-tu', required=True, help="test db_user")
 @click.option('--test_db_passwd', '-ts', required=True, help="test db pass")
-def main(node, jwt, ztid, zttoken, storagepool, production_ip, production_db_user, production_db_passwd, test_db_user, test_db_passwd):
+@click.option('--test_db_humhub_user_passwd', '-ths', required=True, help="test db humhub user pass")
+def main(node, jwt, ztid, zttoken, storagepool, production_ip, production_db_user, production_db_passwd, test_db_user, test_db_passwd, test_db_humhub_user_passwd):
     import ipdb; ipdb.set_trace()
     test_client = create_test_container(node, jwt, ztid, zttoken, storagepool)
 
@@ -112,7 +123,7 @@ def main(node, jwt, ztid, zttoken, storagepool, production_ip, production_db_use
     create_backup(production_ip, production_db_user, production_db_passwd)
 
     # Restore
-    restore(test_client, test_db_user, test_db_passwd)
+    restore(test_client,production_ip,test_db_user, test_db_passwd, test_db_humhub_user_passwd)
 
 
 if __name__ == "__main__":
