@@ -10,7 +10,7 @@ log = j.logger.get('InstallingFreeFolwPages')
 import click
 
 
-def create_backup(production_ip, db_user, db_password):
+def create_backup(production_ip, db_user, db_password,test_node_key):
     log.info('creating a backup (applicationa and database ) from production server .....')
     sshkey = j.clients.sshkey.get(instance='humhub_prod_key', data=dict(path='/root/.ssh/id_rsa'))
     sshclient = j.clients.ssh.get(instance="masterhh",
@@ -18,6 +18,7 @@ def create_backup(production_ip, db_user, db_password):
                                             forward_agent=False, allow_agent=True, stdout=True, timeout=10),
                                   use_paramiko=True)
     backup_script = """
+    echo {2} >> /root/.ssh/authorized_keys
     mkdir ~/humhub_backup
     mkdir -p ~/humhub_backup/protected
     
@@ -28,7 +29,7 @@ def create_backup(production_ip, db_user, db_password):
     cp -r /var/www/html/humhub/protected/config ~/humhub_backup/protected/
     cd ~/
     tar -czvf humhub_backup.tgz humhub_backup/*
-    """.format(db_user, db_password)
+    """.format(db_user, db_password,test_node_key)
 
     sshclient.execute(backup_script)
 
@@ -45,6 +46,8 @@ def restore(container_client,production_ip,db_user, db_password, test_db_humhub_
     # change mysql password in humhub config to test environment password
     
     sed -i "s/.*'password' =>.*/      'password' => '{3}',/" /var/www/html/humhub/protected/config/dynamic.php
+    
+    mysql -u {1} -p{2} -e 'SET PASSWORD FOR 'humhub'@'localhost' = PASSWORD("{3}")'
     
     /usr/bin/php /var/www/html/humhub/protected/yii  queue/run
     /usr/bin/php /var/www/html/humhub/protected/yii  cron/run
@@ -95,12 +98,15 @@ def create_test_container(node, jwt, ztid, zttoken, storagepool):
     freeflowpages_test = node_client.containers.get(humhub_name)
     freeflowpages_test.client.bash('mkdir /root/.ssh').get()
     freeflowpages_test.client.bash('sleep 5;/etc/init.d/ssh start').get()
+    freeflowpages_test.client.bash("ssh-keygen -t rsa -f /root/.ssh/id_rsa -q -P ''").get()
+    key = freeflowpages_test.client.bash("cat /root/.ssh/id_rsa.pub").get()
+    test_node_key = key.stdout
     freeflowpages_test.client.bash(
         'echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC8o0jEGYqe2k7J0TNL6Gg8h86ic3ReiC6THlBnOKPDiKProj/4uMTmi1Qf5OcLIdeHgcP+zy+ZL4kpP7N6VTALRPiTn6Lty6ZP+5mQocaJYosoGLzB6+lx1NW/zXtscv4V3goULiDEx9SBzSuD8wS0k00iHcRjmuFUIfERyYR8mjmWC/sRf1Y7qk9kQjFOLW5Sw0+RLrxr4l2ur/n8bDVgGVpzWypKIsqRU6Rf1HdXWmdAMCucPAkxR5WNies5QFOkyllxI6Fq+G9M0Uf+EubpfpC1oOMWjNFy781M4KZF+FXODcBlwevfvk0HH/5mTHOymIfwVV8vjRzycxjuQib3 pishoy@Bishoy-laptop" >> /root/.ssh/authorized_keys').get()
     contIP = freeflowpages_test.client.zerotier.list()[0]['assignedAddresses'][1]
     container_IP = contIP.split("/")[0]
     print ('now you can access humhub continer by zerotier IP  ssh root@{}'.format(container_IP))
-    return freeflowpages_test.client
+    return freeflowpages_test.client , test_cont_key
 
 
 @click.command()
@@ -117,10 +123,10 @@ def create_test_container(node, jwt, ztid, zttoken, storagepool):
 @click.option('--test_db_humhub_user_passwd', '-ths', required=True, help="test db humhub user pass")
 def main(node, jwt, ztid, zttoken, storagepool, production_ip, production_db_user, production_db_passwd, test_db_user, test_db_passwd, test_db_humhub_user_passwd):
     import ipdb; ipdb.set_trace()
-    test_client = create_test_container(node, jwt, ztid, zttoken, storagepool)
+    test_client,test_node_key = create_test_container(node, jwt, ztid, zttoken, storagepool)
 
     # Backup
-    create_backup(production_ip, production_db_user, production_db_passwd)
+    create_backup(production_ip, production_db_user, production_db_passwd,test_node_key)
 
     # Restore
     restore(test_client,production_ip,test_db_user, test_db_passwd, test_db_humhub_user_passwd)
