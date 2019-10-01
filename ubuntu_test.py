@@ -1,7 +1,7 @@
 from JumpscaleLibs.sal.ubuntu.Ubuntu import Ubuntu
 from Jumpscale import j
 from unittest import TestCase
-
+import os
 
 class Test_Ubuntu(TestCase):
     j.sal.process.execute("apt update")
@@ -81,13 +81,9 @@ class Test_Ubuntu(TestCase):
         rc, out, err = j.sal.process.execute("ls /tmp | grep id_rsa")
         self.assertIn("id_rsa", out)
 
+    @skip("https://github.com/threefoldtech/jumpscaleX_libs/issues/5")
     def test015_apt_get_cache_keys(self):
-        """
-        you need to run this test after  apt_find_all
-        """
-        import apt
-        self.ubuntu._cache_ubuntu = apt.Cache()
-        cache_list = self.ubuntu.apt_get_cache_keys ()
+        cache_list = self.ubuntu.apt_get_cache_keys()
         rc1, pkg_name, err1 = j.sal.process.execute("apt-cache search 'Network' | head -1| awk '{print $1}'")
         name = pkg_name.strip()
         self.assertIn(name, cache_list)
@@ -98,9 +94,8 @@ class Test_Ubuntu(TestCase):
         """
         sal_count = len (self.ubuntu.apt_get_installed())
         rc1, os_count, err1 = j.sal.process.execute("apt list --installed |grep -v 'Listing...'| wc -l")
-        if os_count:
-            os_int_count = int (os_count.strip())
-            self.assertEqual(sal_count, os_int_count)
+        os_int_count = int (os_count.strip())
+        self.assertEqual(sal_count, os_int_count)
 
     def test017_apt_install(self):
         self.ubuntu.apt_install('speedtest-cli')
@@ -111,8 +106,6 @@ class Test_Ubuntu(TestCase):
         """
         check the first line in apt sources list contains a keyworod deb
         """
-        # alot of issue exist below
-        # https://github.com/threefoldtech/jumpscaleX_libs/issues/5
         apt_src_list = self.ubuntu.apt_sources_list()
         first_src = apt_src_list.list[0]
         self.assertIn('deb',first_src)
@@ -123,9 +116,14 @@ class Test_Ubuntu(TestCase):
         you put ony url, method will add deb in starting of it
         :return:
         """
+        if os.path.exists('/etc/apt/sources.list.d/archive.getdeb.net.list'):
+            file_already_exist = 'True'
+        else:
+            file_already_exist = 'False'
         self.ubuntu.apt_sources_uri_add('http://archive.getdeb.net/ubuntu wily-getdeb games')
         rc1, os_apt_sources, err1 = j.sal.process.execute("grep 'ubuntu wily-getdeb games' /etc/apt/sources.list.d/archive.getdeb.net.list")
         self.assertIn('deb',os_apt_sources)
+        if file_already_exist == 'False' :
         j.sal.process.execute("rm /etc/apt/sources.list.d/archive.getdeb.net.list")
 
     def test020_apt_upgrade(self):
@@ -135,12 +133,10 @@ class Test_Ubuntu(TestCase):
         should be zero or less than the count of packages that needed to upgrade before doing upgrade
         """
         rc1,upgradable_pack_before_upgrade,err1 = j.sal.process.execute("apt list --upgradable | grep -v 'Listing...'| wc -l")
-        if upgradable_pack_before_upgrade:
-            upgradable_pack_count_before_upgrade = int (upgradable_pack_before_upgrade.strip())
+        upgradable_pack_count_before_upgrade = int (upgradable_pack_before_upgrade.strip())
         self.ubuntu.apt_upgrade()
         rc2, upgradable_pack_after_upgrade, err2 = j.sal.process.execute("apt list --upgradable | grep -v 'Listing...'| wc -l")
-        if upgradable_pack_after_upgrade:
-            upgradable_pack_count_after_upgrade = int (upgradable_pack_after_upgrade.strip())
+        upgradable_pack_count_after_upgrade = int (upgradable_pack_after_upgrade.strip())
         self.assertGreaterEqual(upgradable_pack_count_before_upgrade,upgradable_pack_count_after_upgrade)
 
     def test021_check(self):
@@ -148,26 +144,30 @@ class Test_Ubuntu(TestCase):
         check is True when the destribution is ubunut or linuxmint
         :return:
         """
-        rc1,distrib,err1 = j.sal.process.execute("lsb_release -i | awk '{print $3}'")
-        rc2,descrip,err2 = j.sal.process.execute("lsb_release -r | awk '{print $2}'")
-        if distrib in ("Ubuntu","linuxmint"):
-            description = float(descrip)
-            if description > 14:
-                mycheck = "True"
-                sal_check = self.ubuntu.check()
-                if mycheck:
-                    self.assertEqual(mycheck, sal_check)
-            else:
-                self.assertNotIn('ubuntu', distrib)
+        rc1,distro1,err1 = j.sal.process.execute("lsb_release -i | awk '{print $3}'")
+        if distro1 in ("Ubuntu","linuxmint"):
+            self.assertTrue(self.ubuntu.check())
+        else:
+            self.assertNotIn('Ubuntu', distro1)
+            self.assertNotIn('LinuxMint', distro1)
 
     def test022_deb_download_install(self):
         """
-        have issue that
-        :return:
+        check download and install the package
         """
+        rc1, out, err1 = j.sal.process.execute('dpkg -s tcpdump|grep Status')
+        if self.assertIn('install ok',out):
+            tcpdump_is_installed = 'True'
+            # can i install it ?
+        else:
+            tcpdump_is_installed = 'False'
+        j.sal.ubuntu.deb_download_install(
+            "http://download.unesp.br/linux/debian/pool/main/t/tcpdump/tcpdump_4.9.2-3_amd64.deb")
+        
+
     def test023_pkg_remove(self):
         """
-        verify that tcpdunp package is installed then remove it
+        verify that tcpdump package is installed then remove it
         """
         j.sal.process.execute('apt install tcpdump -y')
         rc1, out, err1  = j.sal.process.execute('dpkg -s tcpdump|grep Status')
