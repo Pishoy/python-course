@@ -15,14 +15,39 @@ class Test_Ubuntu(TestCase):
         pass
 
     def test001_uptime(self):
+        self.info("checking uptime method ...... ")
         with open("/proc/uptime") as f:
             data = f.read()
             uptime, _ = data.split(" ")
 
         self.assertAlmostEqual(float(uptime), self.ubuntu.uptime(), delta=1000)
 
-    def test002_check(self):
-        self.assertTrue(self.ubuntu.check())
+    @skip('https://github.com/threefoldtech/jumpscaleX_libs/issues/5')
+    def test02_service_install(self):
+
+        self.info('testing service_install method .................')
+        """
+        is a service install not a package install which is mean only create a file in /etc/init/ dir
+        1 - check the service cron is enabled or not
+        2 - check if the service config file is exist , then we need to uninstall service to verify tested method \
+        service install works well
+        3 - verify that config file exist after enable the service
+        4 - return back the state as origin one
+        """
+        cron_service_file = os.path.exists('/etc/init/cron')
+        if cron_service_file:
+            self.ubuntu.service_uninstall('cron')
+        self.ubuntu.service_install('cron','/etc/init.d')
+        self.assertTrue(os.path.exists('/etc/init/cron.conf'))
+        self.ubuntu.service_uninstall('cron')
+        if cron_service_file:
+            self.ubuntu.service_install('cron','/etc/init.d')
+
+    def test027_whoami(self):
+        self.info('testing whoami .......................')
+        sal_user = self.ubuntu.whoami()
+        rc2, os_user, err2 = j.sal.process.execute("whoami")
+        self.assertEquals(os_user.strip(), sal_user)
 
     def test003_version_get(self):
         self.assertIn("Ubuntu", self.ubuntu.version_get())
@@ -125,15 +150,13 @@ class Test_Ubuntu(TestCase):
         3 - esle so we install speedtest-cli by tested method and verify that is installed successfully and remove it \
          to be as origin status
         """
-        if j.sal.ubuntu.is_pkg_installed('speedtest-cli'):
+        speedtest_installed = j.sal.ubuntu.is_pkg_installed('speedtest-cli')
+        if speedtest_installed:
             j.sal.process.execute("apt remove -y speedtest-cli")
-            self.ubuntu.apt_install('speedtest-cli')
-            rc1, out1, err1 = j.sal.process.execute("dpkg -s speedtest-cli|grep Status")
-            self.assertIn('install ok',out1)
-        else:
-            self.ubuntu.apt_install('speedtest-cli')
-            rc2, out2, err2 = j.sal.process.execute("dpkg -s speedtest-cli|grep Status")
-            self.assertIn('install ok', out2)
+        self.ubuntu.apt_install('speedtest-cli')
+        rc1, out1, err1 = j.sal.process.execute("dpkg -s speedtest-cli|grep Status")
+        self.assertIn('install ok',out1)
+        if not speedtest_installed:
             j.sal.process.execute("apt remove -y speedtest-cli")
 
     def test018_apt_sources_list(self):
@@ -152,19 +175,15 @@ class Test_Ubuntu(TestCase):
         check adding url then it create a file under /etc/apt/sources.list.d started with deb and add the url
         you put ony url, method will add deb in starting of it
         """
-        if os.path.exists('/etc/apt/sources.list.d/archive.getdeb.net.list'):
+        file_exist = os.path.exists('/etc/apt/sources.list.d/archive.getdeb.net.list')
+        if file_exist:
             j.sal.process.execute("mv /etc/apt/sources.list.d/archive.getdeb.net.list /tmp")
-            self.ubuntu.apt_sources_uri_add('http://archive.getdeb.net/ubuntu wily-getdeb games')
-            rc1, os_apt_sources, err1 = j.sal.process.execute(
-            "grep 'ubuntu wily-getdeb games' /etc/apt/sources.list.d/archive.getdeb.net.list")
-            self.assertIn('deb', os_apt_sources)
+        self.ubuntu.apt_sources_uri_add('http://archive.getdeb.net/ubuntu wily-getdeb games')
+        rc1, os_apt_sources, err1 = j.sal.process.execute("grep 'ubuntu wily-getdeb games' /etc/apt/sources.list.d/archive.getdeb.net.list")
+        self.assertIn('deb', os_apt_sources)
+        j.sal.process.execute("rm /etc/apt/sources.list.d/archive.getdeb.net.list")
+        if file_exist:
             j.sal.process.execute("mv /tmp/archive.getdeb.net.list /etc/apt/sources.list.d/")
-        else:
-            self.ubuntu.apt_sources_uri_add('http://archive.getdeb.net/ubuntu wily-getdeb games')
-            rc2, os_apt_sources2, err2 = j.sal.process.execute(
-                "grep 'ubuntu wily-getdeb games' /etc/apt/sources.list.d/archive.getdeb.net.list")
-            self.assertIn('deb', os_apt_sources2)
-            j.sal.process.execute("rm /etc/apt/sources.list.d/archive.getdeb.net.list")
 
     def test020_apt_upgrade(self):
         """
@@ -184,7 +203,7 @@ class Test_Ubuntu(TestCase):
         upgradable_pack_count_after_upgrade = int(upgradable_pack_after_upgrade.strip())
         self.assertGreaterEqual(upgradable_pack_count_before_upgrade, upgradable_pack_count_after_upgrade)
 
-    def test021_check(self):
+    def test021_check_os(self):
         """
         check is True when the destribution is ubunut or linuxmint
         1 - get os name by lsb_relase command
@@ -193,11 +212,20 @@ class Test_Ubuntu(TestCase):
         """
         rc1, distro_name, err1 = j.sal.process.execute("lsb_release -i | awk '{print $3}'")
         distro1 = distro_name.strip()
+        rc2, out2, err2 = j.sal.process.execute("lsb_release -r|awk '{print $2}'")
+        distrbo_num = out2.strip()
+        release_num = float (distrbo_num)
         if distro1 in ("Ubuntu", "LinuxMint"):
-            self.assertTrue(self.ubuntu.check())
+            if release_num > 14:
+                self.assertTrue(self.ubuntu.check())
+            else:
+                with self.assertRaises(j.exceptions.RuntimeError) as myexcept:
+                    self.ubuntu.check()
+                    self.assertIn('Only ubuntu version 14+ supported', myexcept.exception.args[0])
         else:
-            self.assertNotIn('Ubuntu', distro1)
-            self.assertNotIn('LinuxMint', distro1)
+            with self.assertRaises(j.exceptions.RuntimeError) as e:
+                self.ubuntu.check()
+            self.assertIn('Only Ubuntu/Mint supported',e.exception.args[0])
 
     def test022_deb_download_install(self):
         """
@@ -206,18 +234,15 @@ class Test_Ubuntu(TestCase):
         2-if tcpdump installed remove it by apt remove before install it, then installed it again by tested method
         3-if tcpdump not installed anymore, then installed it by our tested method and remove it finally
         """
-        if j.sal.ubuntu.is_pkg_installed('tcpdump'):
+        tcpdump_installed = j.sal.ubuntu.is_pkg_installed('tcpdump')
+        if tcpdump_installed:
             j.sal.process.execute("apt remove -y tcpdump")
-            j.sal.ubuntu.deb_download_install(
-                "http://download.unesp.br/linux/debian/pool/main/t/tcpdump/tcpdump_4.9.2-3_amd64.deb")
-            rc2, out2, err2 = j.sal.process.execute('dpkg -s tcpdump|grep Status')
-            self.assertIn('install ok',out2)
-        else:
-            j.sal.ubuntu.deb_download_install(
-            "http://download.unesp.br/linux/debian/pool/main/t/tcpdump/tcpdump_4.9.2-3_amd64.deb")
-            rc3, out3, err3 = j.sal.process.execute('dpkg -s tcpdump|grep Status')
-            self.assertIn('install ok', out3)
-            j.sal.process.execute("apt remove -y tcpdump")
+        j.sal.ubuntu.deb_download_install("http://download.unesp.br/linux/debian/pool/main/t/tcpdump/tcpdump_4.9.2-3_amd64.deb")
+        rc2, out2, err2 = j.sal.process.execute('dpkg -s tcpdump|grep Status')
+        self.assertIn('install ok',out2)
+        j.sal.process.execute("apt remove -y tcpdump")
+        if tcpdump_installed:
+            j.sal.process.execute("apt install -y tcpdump")
 
     def test023_pkg_remove(self):
         """
@@ -227,46 +252,41 @@ class Test_Ubuntu(TestCase):
         3 - if tcpdump not installed, install it, then verify that is installed then remove it with tested method \
         then verify that is removed successfully
         """
-        if j.sal.ubuntu.is_pkg_installed('tcpdump'):
-            j.sal.ubuntu.pkg_remove('tcpdump')
-            self.assertFalse(j.sal.ubuntu.is_pkg_installed('tcpdump'))
+        tcpdump_already_installed = j.sal.ubuntu.is_pkg_installed('tcpdump')
+        if not tcpdump_already_installed:
             j.sal.process.execute("apt install -y tcpdump")
-        else:
-            j.sal.process.execute("apt install -y tcpdump")
-            rc2, out2, err2 = j.sal.process.execute('dpkg -s tcpdump|grep Status')
-            self.assertIn('install ok', out2)
-            j.sal.ubuntu.pkg_remove('tcpdump')
-            self.assertFalse(j.sal.ubuntu.is_pkg_installed('tcpdump'))
+        j.sal.ubuntu.pkg_remove('tcpdump')
+        self.assertFalse(j.sal.ubuntu.is_pkg_installed('tcpdump'))
+        if not tcpdump_already_installed:
+            j.sal.process.execute("apt remove -y tcpdump")
 
     def test024_service_disable_start_boot(self):
         """
         1- check if service is enabled then disable service and verify that is already disabled and then enable it back
         2- if not enabled, then enable it and disable it and verify that is already disabled
         """
-        if os.path.exists('/etc/rc5.d/S01cron'):
-            self.ubuntu.service_disable_start_boot('cron')
-            self.assertFalse(os.path.exists('/etc/rc5.d/S01cron'))
+        cron_file_exist = os.path.exists('/etc/rc5.d/S01cron')
+        if not cron_file_exist:
             self.ubuntu.service_enable_start_boot('cron')
-        else:
-            self.ubuntu.service_enable_start_boot('cron')
-            self.assertTrue(os.path.exists('/etc/rc5.d/S01cron'))
+        self.ubuntu.service_disable_start_boot('cron')
+        self.assertFalse(os.path.exists('/etc/rc5.d/S01cron'))
+        self.ubuntu.service_enable_start_boot('cron')
+        if not cron_file_exist:
             self.ubuntu.service_disable_start_boot('cron')
-            self.assertFalse(os.path.exists('/etc/rc5.d/S01cron'))
 
     def test025_service_enable_start_boot(self):
         """
         same idea as above
         """
-        if os.path.exists('/etc/rc5.d/S01cron'):
+        cron_file_exist = os.path.exists('/etc/rc5.d/S01cron')
+        if cron_file_exist:
+            j.sal.process.execute("cp /etc/rc5.d/S01cron /tmp")
             self.ubuntu.service_disable_start_boot('cron')
             self.assertFalse(os.path.exists('/etc/rc5.d/S01cron'))
-            self.ubuntu.service_enable_start_boot('cron')
-            self.assertTrue(os.path.exists('/etc/rc5.d/S01cron'))
-        else:
-            self.ubuntu.service_enable_start_boot('cron')
-            self.assertTrue(os.path.exists('/etc/rc5.d/S01cron'))
-            self.ubuntu.service_disable_start_boot('cron')
-            self.assertFalse(j.sal.fs.exists('/etc/rc5.d/S01cron'))
+        self.ubuntu.service_enable_start_boot('cron')
+        self.assertTrue(os.path.exists('/etc/rc5.d/S01cron'))
+        if cron_file_exist:
+            j.sal.process.execute("cp /tmp/S01cron /etc/rc5.d/S01cron ")
 
     @skip('https://github.com/threefoldtech/jumpscaleX_libs/issues/5')
     def test026_service_uninstall(self):
@@ -278,16 +298,15 @@ class Test_Ubuntu(TestCase):
         3 - else if service config file does not exist then try to install psql service config file and run uninstall \
         method and verify the service config file does not exist
         """
-        if os.path.exists('/etc/init/cron'):
-            j.sal.process.execute("cp /etc/init/cron.conf /tmp")
-            self.ubuntu.service_uninstall('cron')
-            self.assertFale(os.path.exists('/etc/init/cron.conf'))
-            j.sal.process.execute("cp /tmp/cron.conf /etc/init/cron.conf ")
-        else:
-            self.ubuntu.service_install('cron','/etc/init.d')
-            self.assertTrue(os.path.exists('/etc/init/cron.conf'))
-            self.ubuntu.service_uninstall('cron')
-            self.assertFalse(os.path.exists('/etc/init/cron.conf'))
+        cron_service_file = os.path.exists('/etc/init/cron')
+        if not cron_service_file:
+            self.ubuntu.service_install('cron', '/etc/init.d')
+        j.sal.process.execute("cp /etc/init/cron.conf /tmp")
+        self.ubuntu.service_uninstall('cron')
+        self.assertFale(os.path.exists('/etc/init/cron.conf'))
+        j.sal.process.execute("cp /tmp/cron.conf /etc/init/cron.conf ")
+        if not cron_service_file:
+            j.sal.process.execute("rm /etc/init/cron.conf")
 
     def test027_whoami(self):
         sal_user = self.ubuntu.whoami()
@@ -303,7 +322,7 @@ def main(self=None):
     test_ubuntu = Test_Ubuntu()
     test_ubuntu.setUp()
     test_ubuntu.test001_uptime()
-    test_ubuntu.test002_check()
+    #test_ubuntu.test02_service_install()
     test_ubuntu.test003_version_get()
     test_ubuntu.test004_apt_install_check()
     test_ubuntu.test005_apt_install_version()
@@ -322,11 +341,11 @@ def main(self=None):
     test_ubuntu.test018_apt_sources_list()
     test_ubuntu.test019_apt_sources_uri_add()
     test_ubuntu.test020_apt_upgrade()
-    test_ubuntu.test021_check()
+    test_ubuntu.test021_check_os()
     test_ubuntu.test022_deb_download_install()
     test_ubuntu.test023_pkg_remove()
     test_ubuntu.test024_service_disable_start_boot()
     test_ubuntu.test025_service_enable_start_boot()
-    test_ubuntu.test026_service_uninstall()
+    #test_ubuntu.test026_service_uninstall()
     test_ubuntu.test027_whoami()
     test_ubuntu.tearDown()
