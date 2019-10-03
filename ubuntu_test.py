@@ -2,7 +2,7 @@ from JumpscaleLibs.sal.ubuntu.Ubuntu import Ubuntu
 from Jumpscale import j
 from unittest import TestCase
 import os
-
+from unittest import skip
 
 class Test_Ubuntu(TestCase):
     j.sal.process.execute("apt update")
@@ -53,23 +53,36 @@ class Test_Ubuntu(TestCase):
     def test008_service_start(self):
         self.ubuntu.service_start("cron")
         rc, out, err = j.sal.process.execute("service cron status")
-        self.assertIn("cron is running", out)
+        if 'cron is running' in out:
+            self.assertIn("cron is running", out)
+        else:
+            self.assertIn("Active: active (running)", out)
 
     def test009_service_stop(self):
         j.sal.process.execute("service cron start")
         self.ubuntu.service_stop("cron")
         rc, out, err = j.sal.process.execute("service cron status", die=False)
-        self.assertIn("cron is not running", out)
+        if 'cron is running' in out:
+            self.assertIn("cron is not running", out)
+        else:
+            self.assertIn("Active: inactive (dead)", out)
 
     def test010_service_restart(self):
         j.sal.process.execute("service cron start")
         self.ubuntu.service_restart("cron")
         rc, out, err = j.sal.process.execute("service cron status")
-        self.assertIn("cron is running", out)
+        if 'cron is running' in out:
+            self.assertIn("cron is running", out)
+        else:
+            self.assertIn("Active: active (running)", out)
 
     def test011_service_status(self):
         j.sal.process.execute("service cron start")
-        self.assertTrue(self.ubuntu.service_status("cron"))
+        rc, out, err = j.sal.process.execute("service cron status")
+        if 'cron is running' in out:
+            self.assertIn("cron is running", out)
+        else:
+            self.assertIn("Active: active (running)", out)
 
     def test012_apt_find_all(self):
         self.assertIn("wget", self.ubuntu.apt_find_all("wget"))
@@ -107,13 +120,21 @@ class Test_Ubuntu(TestCase):
 
     def test017_apt_install(self):
         """
-        1 - install speedtest-cli by tested method
-        2 - check speedtest-cli is installed or not
-        3 - if installed the step 2 should has a key-word of speedtest
+        1 - check if speedtest-cli is installed or not
+        2 - if installed, remove it and use tested method to install it and verfiy that is installed
+        3 - esle so we install speedtest-cli by tested method and verify that is installed successfully and remove it \
+         to be as origin status
         """
-        self.ubuntu.apt_install('speedtest-cli')
-        rc1, os_installed, err1 = j.sal.process.execute("apt list --installed |grep speedtest")
-        self.assertIn('speedtest', os_installed)
+        if j.sal.ubuntu.is_pkg_installed('speedtest-cli'):
+            j.sal.process.execute("apt remove -y speedtest-cli")
+            self.ubuntu.apt_install('speedtest-cli')
+            rc1, out1, err1 = j.sal.process.execute("dpkg -s speedtest-cli|grep Status")
+            self.assertIn('install ok',out1)
+        else:
+            self.ubuntu.apt_install('speedtest-cli')
+            rc2, out2, err2 = j.sal.process.execute("dpkg -s speedtest-cli|grep Status")
+            self.assertIn('install ok', out2)
+            j.sal.process.execute("apt remove -y speedtest-cli")
 
     def test018_apt_sources_list(self):
         """
@@ -247,6 +268,7 @@ class Test_Ubuntu(TestCase):
             self.ubuntu.service_disable_start_boot('cron')
             self.assertFalse(j.sal.fs.exists('/etc/rc5.d/S01cron'))
 
+    @skip('https://github.com/threefoldtech/jumpscaleX_libs/issues/5')
     def test026_service_uninstall(self):
         """
         is a service install not a package install which is mean only create a file in /etc/init/ dir
