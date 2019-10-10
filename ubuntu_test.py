@@ -377,15 +377,18 @@ class Test_Ubuntu(TestCase):
         self.info('Get length of installed packages from tested method')
         sal_count = len(self.ubuntu.apt_get_installed())
         self.info('first sal_count value is {} '.format(sal_count))
-        time.sleep(4)
-        sal_count = len(self.ubuntu.apt_get_installed())
-        self.info('secons sal_count value is {} '.format(sal_count))
-        time.sleep(2)
-        sal_count = len(self.ubuntu.apt_get_installed())
+        n = 0
+        if sal_count < os_int_count:
+            self.info('sal_count is less than length of installed packages, then loop to get the right one')
+            while (n > 11):
+                sal_count = len(self.ubuntu.apt_get_installed())
+                time.sleep(1)
+                self.info('sal_count value is {} '.format(sal_count))
+                n = n + 1
         self.info('third sal_count value is {} '.format(sal_count))
         self.info('Verifying installed packages by tested method  and apt list command should be the same')
         self.assertEqual(sal_count, os_int_count)
-
+        self.asserte
     def test017_apt_install(self):
         """TC413
         install a specific ubuntu package.
