@@ -191,6 +191,7 @@ class Test_Docker(TestCase):
             self.info('verifying container {} does not by tested method while die flag is False'.format(name2))
             self.assertIsNone(j.sal.docker.container_get(name2, die=False))
 
+    @skip('https://github.com/threefoldtech/jumpscaleX_libs/issues/29')
     def test009_create_container(self):
         """skip it now due to issue"""
 
@@ -262,15 +263,17 @@ class Test_Docker(TestCase):
         self.info('verifying that image ubuntu:16.04 is exist')
         self.assertIn('ubuntu:16.04',self.docker.images_get())
 
+    @skip('https://github.com/threefoldtech/jumpscaleX_libs/issues/29')
     def test015_image_push(self):
         """
         push image
         """
-
+    @skip('https://github.com/threefoldtech/jumpscaleX_libs/issues/29')
     def test016_status(self):
         """
         return list docker containers with some info like [name, image, sshport, status]
         """
+
 
 def main(self=None):
     """
