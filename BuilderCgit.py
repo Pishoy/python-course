@@ -49,40 +49,6 @@ server {
 }
 """
 
-SPWAN_FCGI = """
-#!/bin/bash
-C_SCRIPT=/usr/bin/spawn-fcgi
-USER=www-data
-GROUP=www-data
-RETVAL=0
-case "$1" in
-        start)
-                echo "Starting fastcgi"
-                sudo -u $USER $C_SCRIPT
-                touch /tmp/cgi.sock
-                chown $USER:$GROUP /tmp/cgi.sock
-                RETVAL=$?
-  ;;
-        stop)
-                echo "Stopping fastcgi"
-                killall -9 fcgiwrap
-                RETVAL=$?
-  ;;
-        restart)
-                echo "Restarting fastcgi"
-                killall -9 fcgiwrap
-                $sudo -u $USER $C_SCRIPT
-                RETVAL=$?
-  ;;
-        *)
-                echo "Usage: $0 {start|stop|restart}"
-                exit 1
-  ;;
-esac
-exit $RETVAL
-
-"""
-
 CGITRC_CONFIG = """
 #
 # cgit config
@@ -175,8 +141,16 @@ class BuilderCgit(j.baseclasses.builder):
     def _init(self, **kwargs):
         self.DIR_CODE = self.tools.joinpaths(self.DIR_BUILD, "code")
         self.DIR_BIN = "/sandbox/bin"
-        self.port = 8080
+        self.port = 8008
         self.host = "localhost"  # TODO
+
+    @property
+    def startup_cmds(self):
+        cgit_server = j.servers.startupcmd.get("cgit")
+        cgit_server.cmd_start = f"/usr/bin/spawn-fcgi  -F $(nproc) -M 666 -s /var/run/fcgiwrap.socket /usr/sbin/fcgiwrap"
+        nginx_server = j.servers.startupcmd.get("nginx")
+        nginx_server.cmd_start = f"/usr/sbin/nginx -g 'daemon off;'"
+        return [cgit_server,nginx_server]
 
     @builder_method()
     def install(self, reset=True):
@@ -196,10 +170,6 @@ class BuilderCgit(j.baseclasses.builder):
             },
         )
         j.sal.fs.writeFile(
-            "/etc/init.d/spawn-fcgi",
-            SPWAN_FCGI
-        )
-        j.sal.fs.writeFile(
             "/etc/cgitrc",
             CGITRC_CONFIG
         )
@@ -207,13 +177,7 @@ class BuilderCgit(j.baseclasses.builder):
             "/usr/lib/cgit/filters/syntax-highlighting.sh",
             SYNTAX_HIGHLIGHT
         )
-        self._execute("chmod +x /etc/init.d/spawn-fcgi && /etc/init.d/spawn-fcgi start")
-        self._execute("nginx -t && service nginx start")
+        self._execute("nginx -t;service nginx stop ")
+        self._execute("service fcgiwrap  stop ")
         for startupcmd in self.startup_cmds:
             startupcmd.start()
-
-    @property
-    def startup_cmds(self):
-        cgit_server = j.servers.startupcmd.get("cgit")
-        cgit_server.cmd_start = f"/usr/bin/spawn-fcgi -M 666 -s /var/run/fcgiwrap.socket /usr/sbin/fcgiwrap'"
-        return [cgit_server]
